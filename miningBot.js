@@ -35,8 +35,11 @@ const getCenter = () => {
 const getBlockBelow = () => {
     let yDisplacement = 1
     const botPosition = bot.entity.position
-    if (bot.blockAt(v(botPosition.x, botPosition.y - yDisplacement, botPosition.z)) === null)
-        return getBlockBelow()
+    if (bot.blockAt(v(botPosition.x, botPosition.y - yDisplacement, botPosition.z)) === null) {
+        console.log('=-=-=-=-=-=-= COULD NOT GET BLOCK BELOW')
+        process.exit()
+        //return getBlockBelow()
+    }
     while (
         bot.blockAt(v(botPosition.x, botPosition.y - yDisplacement, botPosition.z)).type
         === 0
@@ -62,6 +65,17 @@ const updateColumn = () => {
         if (currentColumn.z > getCenter().z + 5)
             currentColumn.z = corners.topRight.z
     }
+    // check that the column isn't empty
+    let currentBlock = bot.blockAt(v(currentColumn.x, hoverHeight, currentColumn.z))
+    let yDisplacement = 0
+    while (currentBlock.name !== 'bedrock') {
+        //console.log(currentBlock.name, currentBlock.position.y)
+        yDisplacement++
+        currentBlock = bot.blockAt(v(currentColumn.x, hoverHeight - yDisplacement, currentColumn.z))
+        if (currentBlock.name !== 'air' && currentBlock.name !== 'bedrock')
+            return
+    }
+    updateColumn()
 } // change the current column to the next one
 
 const options = {
@@ -77,7 +91,7 @@ const enterMine = async () => {
 
     // bot teleports to the mine
     return new Promise((resolve) => {
-        bot.chat('/mine')
+        bot.chat('/warp r')
         setTimeout(() => {
             resolve('teleported to mine')
         }, 1000)
@@ -140,7 +154,7 @@ const hoverCurrentColumn = async () => {
             bot.lookAt(destination).then(() => {
                 resolve('looking at column')
             })
-        }, 20)
+        }, 5)
     })
 
         // fly to the column
@@ -151,7 +165,7 @@ const hoverCurrentColumn = async () => {
                     bot.creative.flyTo(destination, () => {
                         resolve('hovering over column')
                     })
-                }, 20)
+                }, 5)
             })
         })
 
@@ -191,6 +205,19 @@ const mineColumn = async () => {
             })
         })
 
+        // check that the bot is directly over the column
+        .then((message) => {
+            console.log(message)
+            return new Promise((resolve) => {
+                if (!vectorEqual(bot.entity.position, currentColumn))
+                    hoverCurrentColumn().then(() => {
+                        resolve('bot center over square after adjustment')
+                    })
+                else
+                    resolve('bot center over square')
+            })
+        })
+
         // stop flying
         .then((message) => {
             console.log(message)
@@ -209,10 +236,6 @@ const mineColumn = async () => {
                     let delay = 100
                     if (getBlockBelow().name === 'bedrock')
                         resolve('column has been mined')
-                    if (getBlockBelow().name === 'sponge' || getBlockBelow().name === 'beacon')
-                        delay = 2000
-                    if (!bot.canDigBlock(mineBlock) || !bot.canSeeBlock(mineBlock))
-                        delay = 100
                     setTimeout(() => {
                         if (mineBlock !== null &&
                             bot.canDigBlock(mineBlock) &&
@@ -238,6 +261,16 @@ const mineColumn = async () => {
                         resolve('in flight position')
                     })
                 }, 500)
+            })
+        })
+
+        // collect tokens
+        .then((message) => {
+            console.log(message)
+            return new Promise((resolve) => {
+                collectTokens().then(() => {
+                    resolve('tokens collected')
+                })
             })
         })
 
@@ -274,7 +307,7 @@ const sellBlocks = async () => {
                         () => {
                             resolve('items sold')
                         }
-                )}, 500)
+                    )}, 500)
             })
         })
 
@@ -294,7 +327,7 @@ const collectTokens = async () => {
         setTimeout(() => {
             bot.setQuickBarSlot(1)
             resolve('token backpack selected')
-        }, 500)
+        }, 50)
     })
 
         // open the menu and collect tokens
@@ -306,14 +339,15 @@ const collectTokens = async () => {
                         bot.clickWindow(13, 1, 0, () => {
                             bot.closeWindow(window)
                             bot.setQuickBarSlot(0)
+                            bot.chat('/tokens show')
                             resolve('tokens collected')
                         })
-                    }, 500)
+                    }, 50)
                 }
                 bot.once('windowOpen', onWindowOpen)
                 setTimeout(() => {
                     bot.activateItem(false)
-                }, 500)
+                }, 50)
             })
         })
 
@@ -334,17 +368,17 @@ const executeOperations = () => {
 }
 
 const onJoin = () => {
-    bot.setControlState('sprint', true)
     setTimeout(() => {
         enterMine().then(executeOperations)
     }, 1000)
-
 }
 
 bot.once('spawn', onJoin)
 
 const printMessage = (name, message) => {
-    console.log('SERVER MESSAGE:', message)
+    const currentTime = new Date()
+    const time = currentTime.getHours() + ':' + currentTime.getMinutes() + ':' + currentTime.getSeconds()
+    console.log('SERVER MESSAGE', time, ':', message)
 }
 bot.on('chat', printMessage)
 
@@ -358,19 +392,35 @@ const onError = (error) => {
 }
 bot.on('error', onError)
 
+const vectorEqual = (v1, v2) => {
+    return (v1.x === v2.x && v1.y === v2.y && v1.z === v2.z)
+}
+
+const roundPositions = (vector) => {
+    vector.x = Math.floor(vector.x)
+    vector.y = Math.floor(vector.y)
+    vector.z = Math.floor(vector.z)
+    return vector
+}
+
 const idleCheck = () => {
     if (pastPosition === null)
         pastPosition = {
             x: getBotPosition(X),
-            y: getBlockBelow(Y),
+            y: getBotPosition(Y),
             z: getBotPosition(Z)
         }
-    else if (
-        pastPosition.x === getBotPosition(X) &&
-        pastPosition.y === getBotPosition(Y) &&
-        pastPosition.z === getBotPosition(Z)
-    ) {
+    else if (vectorEqual(roundPositions(bot.entity.position), roundPositions(pastPosition))) {
+        console.log('bot idle, restarting script')
         process.exit()
-    }
-
+    } else
+        pastPosition = {
+            x: getBotPosition(X),
+            y: getBotPosition(Y),
+            z: getBotPosition(Z)
+        }
 }
+
+setInterval(() => {
+    idleCheck()
+}, 5000)

@@ -81,8 +81,8 @@ const updateColumn = () => {
 const options = {
     host: 'buzz.brutalprison.com',
     //port: 44855,
-    username: 'ipflower26@gmail.com',
-    password: 'Flower123Power'
+    username: 'email',
+    password: 'password'
 }
 const bot = mineflayer.createBot(options)
 
